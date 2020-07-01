@@ -1,3 +1,4 @@
+import sys
 import cmath
 import sympy
 import logging
@@ -21,11 +22,54 @@ logging.basicConfig(format='[%(asctime)s] %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S', level=logging.DEBUG)
 
 
-class LineSegment:
+class Point(list):
 
-    def __init__(self, point1, point2):
-        self.point1 = point1
-        self.point2 = point2
+    def __init__(self, *point):
+        if len(point) == 2:
+            self.point = point
+            self.length = cmath.sqrt(
+                self.point[0] ** 2 + self.point[1] ** 2).real
+        else:
+            raise Exception('Point must be tow numbers.')
+
+    def __add__(self, other):
+        return Point(self.point[0] + other.point[0], self.point[1] + other.point[1])
+
+    def __sub__(self, other):
+        return Point(self.point[0] - other.point[0], self.point[1] - other.point[1])
+
+    def __rmul__(self, other):
+        return Point(other * self.point[0], other * self.point[1])
+
+    def __neg__(self):
+        # 定义负号
+        return Point(-self.point[0], -self.point[1])
+
+    def __str__(self):
+        return '{}'.format(self.point)
+
+    def __repr__(self):
+        return '{}'.format(self.point)
+
+    def __getitem__(self, key):
+        # 定义该类下标引用的数值调用方式，不允许切片
+        if isinstance(key, int):
+            if key in (0, 1):
+                return self.point[key]
+            else:
+                raise IndexError('The index must in (0,1)')
+        else:
+            raise TypeError('The key type can not be slice.')
+
+
+class Vector(list):
+
+    def __init__(self, startPoint, endPoint):
+        self.startPoint = startPoint
+        self.endPoint = endPoint
+        self.location = self.endPoint - self.startPoint
+        self.length = cmath.sqrt(
+            self.location[0] ** 2 + self.location[1] ** 2).real
 
 
 def solveEquationsOfTwoUnknowns(line1, line2):
@@ -46,41 +90,44 @@ def solveEquationsOfTwoUnknowns(line1, line2):
         return intersection
 
 
-def getTargetLineSegmentArgus(LineSegment1, LineSegment2):
+def getLineSegmentArguments(vector1, vector2):
+    # w 代表起点在 vector1 ,终点在 vector2 的向量
     # w = C0 - A0 + n * ( D0 - C0 ) - t * (B0 - A0)
     # 0 =< n,t <= 1
-    # p = C0 - A0 , q = D0 - C0, r = A0 - B0
-    # w = n * q - t * r + p
+    # p = C0 - A0 , q = D0 - C0, r = - (B0 - A0)
+    # w = n * q + t * r + p
     # Lab = A0 + t * (B0 - A0)
     # Lcd = C0 + n * (D0 - C0)
-    px = LineSegment2.point1[0] - LineSegment1.point1[0]
-    py = LineSegment2.point1[1] - LineSegment1.point1[1]
-    qx = LineSegment2.point2[0] - LineSegment2.point1[0]
-    qy = LineSegment2.point2[1] - LineSegment2.point1[1]
-    rx = -(LineSegment1.point2[0] - LineSegment1.point1[0])
-    ry = -(LineSegment1.point2[1] - LineSegment1.point1[1])
+    A = vector1.startPoint
+    B = vector1.endPoint
+    C = vector2.startPoint
+    D = vector2.endPoint
+    p = C - A
+    q = D - C
+    r = A - B
 
-    return ((qx, rx, px), (qy, ry, py))
+    return q, r, p
 
 
 def judgeCrossPoint(linesegment1, linesegment2):
-    groupX, groupY = getTargetLineSegmentArgus(linesegment1, linesegment2)
-    logging.debug('{} {}'.format(groupX, groupY))
-    result = solveEquationsOfTwoUnknowns(groupX, groupY)
+    q, r, p = getLineSegmentArguments(linesegment1, linesegment2)
+
+    lineX = [each[0] for each in (q, r, p)]
+    lineY = [each[1] for each in (q, r, p)]
+    result = solveEquationsOfTwoUnknowns(lineX, lineY)
     if result is not None:
         t, n = result
-        logging.debug('{} {}'.format(t, n))
+        logging.debug('t : {} n: {}'.format(t, n))
         if t >= 0 and t <= 1 and n >= 0 and n <= 1:
             # 交点坐标
-            # crossPointLocation = (linesegment1.point1[0] + t * (linesegment1.point2[0] - linesegment1.point1[0]),
-            #                       linesegment1.point1[1] + t * (linesegment1.point2[1] - linesegment1.point1[1]))
-            # logging.info('两线段有交点交点坐标为：')
-            # logging.info(crossPointLocation)
-            # logging.info('所以两线段的距离最小值为零。')
+            crossPointLocation = linesegment1.startPoint + t * \
+                (linesegment1.startPoint - linesegment1.endPoint)
+            logging.info(crossPointLocation)
             logging.info('两条线段相交。')
             return 1
         else:
-            logging.info('交点不在线段之上，重新计算最小距离。')
+            logging.debug('t 和 n 必须在 [0,1] 之间两条线段才相交。')
+            logging.debug('交点不在线段之上，重新计算最小距离。')
             return 2
     else:
         # 此处需计算最小距离
@@ -88,74 +135,87 @@ def judgeCrossPoint(linesegment1, linesegment2):
         return 3
 
 
-def getDistance(segmentLocation):
-
-    x = segmentLocation[0]
-    y = segmentLocation[1]
-    distance = cmath.sqrt(x ** 2 + y ** 2).real
-    return distance
-
-
 def getPointToSegmentMinDistance(pointLocation, linesegment):
 
     # 以下 AB,AP J均为向量，在这里无法加特别标志，在此说明。
     P = pointLocation
-    A = linesegment.point1
-    B = linesegment.point2
-    AB = (B[0] - A[0], B[1] - A[1])
-    AP = (P[0] - A[0], P[1] - A[1])
-    BP = (P[0] - B[0], P[1] - B[1])
+    A = linesegment.startPoint
+    B = linesegment.endPoint
+    AB = B - A
+    AP = P - A
+    BP = P - B
 
     ACDirectionFlag = (AB[0] * AP[0] - AB[1] * AP[1]) / \
         (AB[0] ** 2 + AB[1] ** 2)
 
     if ACDirectionFlag <= 0:
-        minDistance = getDistance(AP)
+        minDistance = AP.length
     elif ACDirectionFlag > 1:
-        minDistance = getDistance(BP)
+        minDistance = BP.length
     else:
-        ACLength = getDistance(AB) * ACDirectionFlag
-        APLength = getDistance(AP)
+        ACLength = AB.length * ACDirectionFlag
+        APLength = AP.length
         minDistance = cmath.sqrt(APLength ** 2 - ACLength ** 2).real
     return minDistance
 
 
 def getTowSegmentsMinDistance(linesegment1, linesegment2):
-    logging.info()
+
+    '''
+    example:
+
+    point1 = Point(1, 2)
+    point2 = Point(3, 5)
+    linesegment1 = Vector(point1, point2)
+
+    point3 = Point(2, 4)
+    point4 = Point(6, 10)
+    linesegment2 = Vector(point3, point4)
+
+    getTowSegmentsMinDistance(linesegment1, linesegment2)
+    '''
+
+    logging.debug('line segment : {} >> {}'.format(
+        linesegment1.startPoint, linesegment1.endPoint))
+    logging.debug('line segment : {} >> {}'.format(
+        linesegment2.startPoint, linesegment2.endPoint))
     flag = judgeCrossPoint(linesegment1, linesegment2)
     if flag == 1:
         minDistance = 0
     elif flag == 2:
         fourPointDistanceList = []
         line1Point1 = getPointToSegmentMinDistance(
-            linesegment1.point1, linesegment2)
+            linesegment1.startPoint, linesegment2)
         line1Point2 = getPointToSegmentMinDistance(
-            linesegment1.point2, linesegment2)
+            linesegment1.endPoint, linesegment2)
         line2Point1 = getPointToSegmentMinDistance(
-            linesegment2.point1, linesegment1)
+            linesegment2.startPoint, linesegment1)
         line2Point2 = getPointToSegmentMinDistance(
-            linesegment2.point2, linesegment1)
+            linesegment2.endPoint, linesegment1)
         fourPointDistanceList = [line1Point1,
                                  line1Point2, line2Point1, line2Point2]
         minDistance = min(*fourPointDistanceList)
     elif flag == 3:
         minDistance = getPointToSegmentMinDistance(
-            linesegment1.point1, linesegment2)
+            linesegment1.startPoint, linesegment2)
     logging.info('线段最小距离为 {}'.format(minDistance))
+
 
 def test():
 
-    point1 = (1, 2)
-    point2 = (3, 5)
-    linesegment1 = LineSegment(point1, point2)
-    # point3 = (2, 4)
-    # point4 = (6, 10)
-    # point3 = (1, 5)
-    # point4 = (8, 1)
-    point3 = (7, 8)
-    point4 = (11, 12)
-    linesegment2 = LineSegment(point3, point4)
-    getTowSegmentsMinDistance(linesegment1, linesegment2)
+    logging.debug('Testing getTowSegmentsMinDistance...')
+
+    testPointList = [((1, 2), (3, 5)),
+                     ((2, 4), (6, 10)),
+                     ((1, 5), (8, 1)),
+                     ((7, 8), (11, 12))
+                     ]
+
+    linesegment1 = Vector(Point(*testPointList[0][0]),Point(*testPointList[0][1]))
+    for line in testPointList[1:]:
+        linesegment2 = Vector(Point(*line[0]), Point(*line[1]))
+        getTowSegmentsMinDistance(linesegment1, linesegment2)
+        logging.debug('----------------------------')
 
 
 if __name__ == '__main__':
